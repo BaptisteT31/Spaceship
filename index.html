@@ -2,16 +2,17 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Jeu HTML Adapté Mobile</title>
+  <title>Jeu HTML – Power‑ups Cumulables et Cadence Adaptative</title>
   <style>
     html, body {
       margin: 0;
       padding: 0;
-      overflow: hidden; /* Supprime les barres de défilement */
+      overflow: hidden;
+      background-color: #000;
     }
     canvas {
-      background-color: #000;
       display: block;
+      background-color: #000;
     }
   </style>
 </head>
@@ -21,80 +22,110 @@
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
 
-    // Définition du vaisseau avant d'appeler resizeCanvas()
+    // Ajustement du canvas
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      spaceship.y = canvas.height - 30;
+    }
+    window.addEventListener("resize", resizeCanvas);
+
+    // Variables globales
+    let score = 0;
+    let gameOver = false;
+    let lastTime = performance.now();
+
+    // Vaisseau (triangle)
     const spaceship = {
-      x: 0, // sera initialisé dans resizeCanvas()
+      x: 0, // sera initialisé via resizeCanvas()
       y: 0,
       width: 20,
       height: 20,
     };
-
-    // Fonction pour ajuster le canvas à la taille de l'écran
-    function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      spaceship.x = canvas.width / 2;
-      spaceship.y = canvas.height - 30; // positionne le vaisseau en bas
-    }
-    window.addEventListener("resize", resizeCanvas);
     resizeCanvas();
+    spaceship.x = canvas.width / 2;
 
-    // Stockage des missiles tirés
-    let missiles = [];
+    // Paramètres de tir – cadence ajustable avec power‑up rapidfire cumulable
+    const baseMissileInterval = 500; // intervalle de base (ms)
+    const minMissileInterval = 100;  // intervalle minimal (5 fois plus rapide)
+    let rapidfireCount = 0;          // nombre de power‑up rapidfire cumulés
+    let missileIntervalTime = baseMissileInterval;
+    let missileIntervalID = setInterval(fireMissile, missileIntervalTime);
 
-    // Paramètres des briques
-    const brickRowCount = 3;
-    const brickColumnCount = 8;
+    function updateMissileInterval() {
+      // On plafonne à 5 bonus
+      let count = Math.min(rapidfireCount, 5);
+      // La formule logarithmique donne :
+      // intervalle = base - (base - min) * (log(count+1) / log(6))
+      missileIntervalTime = baseMissileInterval - (baseMissileInterval - minMissileInterval) * (Math.log(count+1) / Math.log(6));
+      clearInterval(missileIntervalID);
+      missileIntervalID = setInterval(fireMissile, missileIntervalTime);
+    }
+
+    // Pour les gros missiles
+    let bigMissileActive = false;
+    let bigMissileIntervalID = null;
+
+    // Vitesses (en pixels par seconde)
+    const missileSpeed = 400;
+    const bigMissileSpeed = 400;
+    
+    // Pour les briques
     const brickWidth = 60;
     const brickHeight = 20;
     const brickPadding = 10;
     const brickOffsetTop = 30;
     const brickOffsetLeft = 30;
+    const brickStep = brickHeight + brickPadding; // déplacement d'un cran
+    const brickRowInterval = 2000; // temps (ms) pour un cran complet
+    const brickVelocity = brickStep / brickRowInterval; // pixels/ms
 
+    // Pour l'animation smooth de la descente
+    let brickAccumulated = 0; // déplacement partiel en cours
+
+    // Tableaux d'objets du jeu
+    let missiles = [];    // missiles normaux
+    let bigMissiles = [];  // gros missiles
+    let powerUps = [];    // power‑ups qui tombent
+
+    // Initialisation des briques
+    const brickColumnCount = 8;
+    const initialBrickRowCount = 3;
     let bricks = [];
     for (let c = 0; c < brickColumnCount; c++) {
       bricks[c] = [];
-      for (let r = 0; r < brickRowCount; r++) {
+      for (let r = 0; r < initialBrickRowCount; r++) {
         const brickX = c * (brickWidth + brickPadding) + brickOffsetLeft;
         const brickY = r * (brickHeight + brickPadding) + brickOffsetTop;
-        bricks[c][r] = { x: brickX, y: brickY, status: 1 };
+        bricks[c].push({ x: brickX, y: brickY, status: 1 });
       }
     }
 
-    // Tir automatique des missiles à intervalle régulier (toutes les 500 ms)
-    const missileInterval = 500; // en millisecondes
-    setInterval(() => {
+    // Fonction de tir d'un missile normal
+    function fireMissile() {
+      if (gameOver) return;
       const missileX = spaceship.x;
       const missileY = spaceship.y - spaceship.height;
-      missiles.push({ x: missileX, y: missileY, width: 4, height: 10, speed: 7 });
-    }, missileInterval);
+      missiles.push({ x: missileX, y: missileY, width: 4, height: 10, speed: missileSpeed });
+    }
 
-    // Gestion du déplacement du vaisseau par le toucher
-    canvas.addEventListener("touchmove", function(e) {
-      e.preventDefault();
-      let touch = e.touches[0];
-      spaceship.x = touch.clientX;
-      // Empêche le vaisseau de sortir du canvas
-      if (spaceship.x < spaceship.width) {
-        spaceship.x = spaceship.width;
-      }
-      if (spaceship.x > canvas.width - spaceship.width) {
-        spaceship.x = canvas.width - spaceship.width;
-      }
-    }, {passive: false});
+    // Fonction de tir d'un gros missile
+    function fireBigMissile() {
+      if (gameOver) return;
+      const missileX = spaceship.x;
+      const missileY = spaceship.y - spaceship.height;
+      bigMissiles.push({ x: missileX, y: missileY, width: 8, height: 20, speed: bigMissileSpeed });
+    }
 
-    // Optionnel : support pour la souris (pour tester sur PC)
-    canvas.addEventListener("mousemove", function(e) {
-      spaceship.x = e.clientX;
-      if (spaceship.x < spaceship.width) {
-        spaceship.x = spaceship.width;
+    // Active le tir automatique des gros missiles toutes les 5s
+    function activateBigMissile() {
+      if (!bigMissileActive) {
+        bigMissileActive = true;
+        bigMissileIntervalID = setInterval(fireBigMissile, 5000);
       }
-      if (spaceship.x > canvas.width - spaceship.width) {
-        spaceship.x = canvas.width - spaceship.width;
-      }
-    });
+    }
 
-    // Dessiner le vaisseau sous forme de triangle
+    // Dessiner le vaisseau
     function drawSpaceship() {
       ctx.beginPath();
       ctx.moveTo(spaceship.x, spaceship.y - spaceship.height);
@@ -105,59 +136,52 @@
       ctx.fill();
     }
 
-    // Dessiner les missiles
+    // Dessiner les missiles normaux
     function drawMissiles() {
       ctx.fillStyle = "#FF0000";
       missiles.forEach(m => {
-        ctx.fillRect(m.x - m.width / 2, m.y, m.width, m.height);
+        ctx.fillRect(m.x - m.width/2, m.y, m.width, m.height);
       });
     }
 
-    // Dessiner les briques
+    // Dessiner les gros missiles
+    function drawBigMissiles() {
+      ctx.fillStyle = "#FFA500";
+      bigMissiles.forEach(m => {
+        ctx.fillRect(m.x - m.width/2, m.y, m.width, m.height);
+      });
+    }
+
+    // Dessiner les briques (avec l'animation de descente)
     function drawBricks() {
       for (let c = 0; c < brickColumnCount; c++) {
-        for (let r = 0; r < brickRowCount; r++) {
-          const b = bricks[c][r];
+        bricks[c].forEach(b => {
           if (b.status === 1) {
             ctx.beginPath();
-            ctx.rect(b.x, b.y, brickWidth, brickHeight);
+            ctx.rect(b.x, b.y + brickAccumulated, brickWidth, brickHeight);
             ctx.fillStyle = "#0095DD";
             ctx.fill();
             ctx.closePath();
           }
-        }
+        });
       }
     }
 
-    // Détection des collisions entre un missile et une brique
-    function collisionDetection() {
-      for (let i = 0; i < missiles.length; i++) {
-        const m = missiles[i];
-        for (let c = 0; c < brickColumnCount; c++) {
-          for (let r = 0; r < brickRowCount; r++) {
-            const b = bricks[c][r];
-            if (b.status === 1) {
-              if (
-                m.x > b.x &&
-                m.x < b.x + brickWidth &&
-                m.y < b.y + brickHeight &&
-                m.y + m.height > b.y
-              ) {
-                b.status = 0;
-                missiles.splice(i, 1);
-                i--;
-                break;
-              }
-            }
-          }
-        }
-      }
+    // Dessiner les power‑ups
+    function drawPowerUps() {
+      powerUps.forEach(p => {
+        ctx.beginPath();
+        ctx.rect(p.x - p.width/2, p.y - p.height/2, p.width, p.height);
+        ctx.fillStyle = (p.type === "rapidfire") ? "#FFFF00" : "#FF00FF";
+        ctx.fill();
+        ctx.closePath();
+      });
     }
 
-    // Mise à jour de la position des missiles
-    function updateMissiles() {
+    // Mise à jour des missiles (en fonction de dt)
+    function updateMissiles(dt) {
       for (let i = 0; i < missiles.length; i++) {
-        missiles[i].y -= missiles[i].speed;
+        missiles[i].y -= missiles[i].speed * dt / 1000;
         if (missiles[i].y < 0) {
           missiles.splice(i, 1);
           i--;
@@ -165,18 +189,213 @@
       }
     }
 
-    // Boucle principale de dessin
+    function updateBigMissiles(dt) {
+      for (let i = 0; i < bigMissiles.length; i++) {
+        bigMissiles[i].y -= bigMissiles[i].speed * dt / 1000;
+        if (bigMissiles[i].y < 0) {
+          bigMissiles.splice(i, 1);
+          i--;
+        }
+      }
+    }
+
+    function updatePowerUps(dt) {
+      for (let i = 0; i < powerUps.length; i++) {
+        powerUps[i].y += powerUps[i].speed * dt / 1000;
+        if (powerUps[i].y - powerUps[i].height/2 > canvas.height) {
+          powerUps.splice(i, 1);
+          i--;
+        }
+      }
+    }
+
+    // Collision entre missiles normaux et briques
+    function collisionDetectionMissiles() {
+      for (let i = 0; i < missiles.length; i++) {
+        let m = missiles[i];
+        outer: for (let c = 0; c < brickColumnCount; c++) {
+          for (let j = 0; j < bricks[c].length; j++) {
+            let b = bricks[c][j];
+            if (b.status === 1) {
+              if (m.x > b.x && m.x < b.x + brickWidth &&
+                  m.y < b.y + brickAccumulated + brickHeight &&
+                  m.y + m.height > b.y + brickAccumulated) {
+                b.status = 0;
+                score += 10;
+                missiles.splice(i, 1);
+                i--;
+                // 20% de chance de dropper un power‑up
+                if (Math.random() < 0.2) {
+                  let type = Math.random() < 0.5 ? "rapidfire" : "bigmissile";
+                  powerUps.push({
+                    x: b.x + brickWidth/2,
+                    y: b.y + brickAccumulated + brickHeight/2,
+                    type: type,
+                    width: 20,
+                    height: 20,
+                    speed: 100
+                  });
+                }
+                break outer;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Collision entre gros missiles et briques (avec explosion)
+    function collisionDetectionBigMissiles() {
+      for (let i = 0; i < bigMissiles.length; i++) {
+        let m = bigMissiles[i];
+        outer: for (let c = 0; c < brickColumnCount; c++) {
+          for (let j = 0; j < bricks[c].length; j++) {
+            let b = bricks[c][j];
+            if (b.status === 1) {
+              if (m.x > b.x && m.x < b.x + brickWidth &&
+                  m.y < b.y + brickAccumulated + brickHeight &&
+                  m.y + m.height > b.y + brickAccumulated) {
+                explodeBrick(b);
+                bigMissiles.splice(i, 1);
+                i--;
+                break outer;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Explosion : détruit la brique touchée et celles adjacentes
+    function explodeBrick(hitBrick) {
+      const centerX = hitBrick.x + brickWidth / 2;
+      const centerY = hitBrick.y + brickAccumulated + brickHeight / 2;
+      for (let c = 0; c < brickColumnCount; c++) {
+        for (let j = 0; j < bricks[c].length; j++) {
+          let b = bricks[c][j];
+          if (b.status === 1) {
+            const bCenterX = b.x + brickWidth / 2;
+            const bCenterY = b.y + brickAccumulated + brickHeight / 2;
+            if (Math.abs(bCenterX - centerX) <= brickWidth + brickPadding &&
+                Math.abs(bCenterY - centerY) <= brickHeight + brickPadding) {
+              b.status = 0;
+              score += 10;
+            }
+          }
+        }
+      }
+    }
+
+    // Collision entre power‑ups et le vaisseau
+    function collisionDetectionPowerUps() {
+      for (let i = 0; i < powerUps.length; i++) {
+        let p = powerUps[i];
+        if (
+          p.x - p.width/2 < spaceship.x + spaceship.width &&
+          p.x + p.width/2 > spaceship.x - spaceship.width &&
+          p.y - p.height/2 < spaceship.y &&
+          p.y + p.height/2 > spaceship.y - spaceship.height
+        ) {
+          if (p.type === "rapidfire") {
+            // Incrémente le cumul (max 5) et met à jour l'intervalle de tir
+            rapidfireCount++;
+            updateMissileInterval();
+          } else if (p.type === "bigmissile") {
+            activateBigMissile();
+          }
+          powerUps.splice(i, 1);
+          i--;
+        }
+      }
+    }
+
+    // Mise à jour smooth de la descente des briques
+    function updateBricks(dt) {
+      brickAccumulated += brickVelocity * dt;
+      if (brickAccumulated >= brickStep) {
+        for (let c = 0; c < brickColumnCount; c++) {
+          bricks[c].forEach(b => {
+            b.y += brickStep;
+          });
+          const brickX = c * (brickWidth + brickPadding) + brickOffsetLeft;
+          bricks[c].unshift({ x: brickX, y: brickOffsetTop, status: 1 });
+        }
+        brickAccumulated -= brickStep;
+      }
+    }
+
+    // Vérification du Game Over : si une brique atteint le niveau du vaisseau
+    function checkGameOver() {
+      for (let c = 0; c < brickColumnCount; c++) {
+        for (let j = 0; j < bricks[c].length; j++) {
+          let b = bricks[c][j];
+          if (b.status === 1 && (b.y + brickAccumulated + brickHeight) >= spaceship.y) {
+            gameOver = true;
+            clearInterval(missileIntervalID);
+            if (bigMissileIntervalID) clearInterval(bigMissileIntervalID);
+            return;
+          }
+        }
+      }
+    }
+
+    // Affichage du score et du message de Game Over
+    function drawScore() {
+      ctx.fillStyle = "#FFF";
+      ctx.font = "20px Arial";
+      ctx.fillText("Score: " + score, 10, 30);
+      if (gameOver) {
+        ctx.font = "50px Arial";
+        ctx.fillStyle = "#FF0000";
+        ctx.fillText("PERDU", canvas.width/2 - 100, canvas.height/2);
+      }
+    }
+
+    // Boucle principale avec dt
     function draw() {
+      let currentTime = performance.now();
+      let dt = currentTime - lastTime;
+      lastTime = currentTime;
+      
+      if (!gameOver) {
+        updateBricks(dt);
+        updateMissiles(dt);
+        updateBigMissiles(dt);
+        updatePowerUps(dt);
+        collisionDetectionMissiles();
+        collisionDetectionBigMissiles();
+        collisionDetectionPowerUps();
+        checkGameOver();
+      }
+      
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       drawBricks();
       drawSpaceship();
       drawMissiles();
-      updateMissiles();
-      collisionDetection();
-      requestAnimationFrame(draw);
+      drawBigMissiles();
+      drawPowerUps();
+      drawScore();
+      
+      if (!gameOver) {
+        requestAnimationFrame(draw);
+      }
     }
-
     draw();
+
+    // Gestion du déplacement par toucher (et souris pour test PC)
+    canvas.addEventListener("touchmove", function(e) {
+      e.preventDefault();
+      let touch = e.touches[0];
+      spaceship.x = touch.clientX;
+      if (spaceship.x < spaceship.width) spaceship.x = spaceship.width;
+      if (spaceship.x > canvas.width - spaceship.width) spaceship.x = canvas.width - spaceship.width;
+    }, {passive: false});
+
+    canvas.addEventListener("mousemove", function(e) {
+      spaceship.x = e.clientX;
+      if (spaceship.x < spaceship.width) spaceship.x = spaceship.width;
+      if (spaceship.x > canvas.width - spaceship.width) spaceship.x = canvas.width - spaceship.width;
+    });
   </script>
 </body>
 </html>
