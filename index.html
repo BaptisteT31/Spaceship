@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Jeu HTML Adapté Mobile</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden; /* Supprime les barres de défilement */
+    }
+    canvas {
+      background-color: #000;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Définition du vaisseau avant d'appeler resizeCanvas()
+    const spaceship = {
+      x: 0, // sera initialisé dans resizeCanvas()
+      y: 0,
+      width: 20,
+      height: 20,
+    };
+
+    // Fonction pour ajuster le canvas à la taille de l'écran
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      spaceship.x = canvas.width / 2;
+      spaceship.y = canvas.height - 30; // positionne le vaisseau en bas
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    // Stockage des missiles tirés
+    let missiles = [];
+
+    // Paramètres des briques
+    const brickRowCount = 3;
+    const brickColumnCount = 8;
+    const brickWidth = 60;
+    const brickHeight = 20;
+    const brickPadding = 10;
+    const brickOffsetTop = 30;
+    const brickOffsetLeft = 30;
+
+    let bricks = [];
+    for (let c = 0; c < brickColumnCount; c++) {
+      bricks[c] = [];
+      for (let r = 0; r < brickRowCount; r++) {
+        const brickX = c * (brickWidth + brickPadding) + brickOffsetLeft;
+        const brickY = r * (brickHeight + brickPadding) + brickOffsetTop;
+        bricks[c][r] = { x: brickX, y: brickY, status: 1 };
+      }
+    }
+
+    // Tir automatique des missiles à intervalle régulier (toutes les 500 ms)
+    const missileInterval = 500; // en millisecondes
+    setInterval(() => {
+      const missileX = spaceship.x;
+      const missileY = spaceship.y - spaceship.height;
+      missiles.push({ x: missileX, y: missileY, width: 4, height: 10, speed: 7 });
+    }, missileInterval);
+
+    // Gestion du déplacement du vaisseau par le toucher
+    canvas.addEventListener("touchmove", function(e) {
+      e.preventDefault();
+      let touch = e.touches[0];
+      spaceship.x = touch.clientX;
+      // Empêche le vaisseau de sortir du canvas
+      if (spaceship.x < spaceship.width) {
+        spaceship.x = spaceship.width;
+      }
+      if (spaceship.x > canvas.width - spaceship.width) {
+        spaceship.x = canvas.width - spaceship.width;
+      }
+    }, {passive: false});
+
+    // Optionnel : support pour la souris (pour tester sur PC)
+    canvas.addEventListener("mousemove", function(e) {
+      spaceship.x = e.clientX;
+      if (spaceship.x < spaceship.width) {
+        spaceship.x = spaceship.width;
+      }
+      if (spaceship.x > canvas.width - spaceship.width) {
+        spaceship.x = canvas.width - spaceship.width;
+      }
+    });
+
+    // Dessiner le vaisseau sous forme de triangle
+    function drawSpaceship() {
+      ctx.beginPath();
+      ctx.moveTo(spaceship.x, spaceship.y - spaceship.height);
+      ctx.lineTo(spaceship.x - spaceship.width, spaceship.y);
+      ctx.lineTo(spaceship.x + spaceship.width, spaceship.y);
+      ctx.closePath();
+      ctx.fillStyle = "#00FF00";
+      ctx.fill();
+    }
+
+    // Dessiner les missiles
+    function drawMissiles() {
+      ctx.fillStyle = "#FF0000";
+      missiles.forEach(m => {
+        ctx.fillRect(m.x - m.width / 2, m.y, m.width, m.height);
+      });
+    }
+
+    // Dessiner les briques
+    function drawBricks() {
+      for (let c = 0; c < brickColumnCount; c++) {
+        for (let r = 0; r < brickRowCount; r++) {
+          const b = bricks[c][r];
+          if (b.status === 1) {
+            ctx.beginPath();
+            ctx.rect(b.x, b.y, brickWidth, brickHeight);
+            ctx.fillStyle = "#0095DD";
+            ctx.fill();
+            ctx.closePath();
+          }
+        }
+      }
+    }
+
+    // Détection des collisions entre un missile et une brique
+    function collisionDetection() {
+      for (let i = 0; i < missiles.length; i++) {
+        const m = missiles[i];
+        for (let c = 0; c < brickColumnCount; c++) {
+          for (let r = 0; r < brickRowCount; r++) {
+            const b = bricks[c][r];
+            if (b.status === 1) {
+              if (
+                m.x > b.x &&
+                m.x < b.x + brickWidth &&
+                m.y < b.y + brickHeight &&
+                m.y + m.height > b.y
+              ) {
+                b.status = 0;
+                missiles.splice(i, 1);
+                i--;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Mise à jour de la position des missiles
+    function updateMissiles() {
+      for (let i = 0; i < missiles.length; i++) {
+        missiles[i].y -= missiles[i].speed;
+        if (missiles[i].y < 0) {
+          missiles.splice(i, 1);
+          i--;
+        }
+      }
+    }
+
+    // Boucle principale de dessin
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBricks();
+      drawSpaceship();
+      drawMissiles();
+      updateMissiles();
+      collisionDetection();
+      requestAnimationFrame(draw);
+    }
+
+    draw();
+  </script>
+</body>
+</html>
