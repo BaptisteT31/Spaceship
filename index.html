@@ -52,7 +52,7 @@
     function resizeCanvas() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
-      spaceship.y = canvas.height - 30;
+      spaceship.y = canvas.height - 100;
       updateDimensions();
       recalcBricksPositions();
     }
@@ -150,7 +150,7 @@
           x: missileX,
           y: missileY,
           width: 6,
-          height: 12,
+          height: 22,
           speed: missileSpeed,
           vx: 0,
           vy: missileSpeed
